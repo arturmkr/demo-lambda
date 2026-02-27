@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Buckets for Lambda code and images
+
+Resources:
+  LambdaCodeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "lambdas-${AWS::AccountId}-${AWS::Region}"
+
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "images-${AWS::AccountId}-${AWS::Region}"
+
+Outputs:
+  LambdaBucket:
+    Value: !Ref LambdaCodeBucket
+  ImagesBucket:
+    Value: !Ref ImagesBucket
