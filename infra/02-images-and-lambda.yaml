@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates images bucket + Lambda (from S3 zip) + S3 notification (original/ -> Lambda)
+
+Resources:
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - LambdaInvokePermissionForS3
+    Properties:
+      BucketName: !Sub "images-${AWS::AccountId}-${AWS::Region}"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt ImageResizerLambda.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: original/
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ImageResizerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: image-resizer-100x100
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: arn:aws:iam::344077251643:role/LabRole
+      Timeout: 20
+      MemorySize: 256
+      Architectures:
+        - x86_64
+      Code:
+        S3Bucket: !Sub "lambdas-${AWS::AccountId}-${AWS::Region}"
+        S3Key: function.zip
+
+  LambdaInvokePermissionForS3:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ImageResizerLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub "arn:aws:s3:::images-${AWS::AccountId}-${AWS::Region}"
+
+Outputs:
+  ImagesBucketName:
+    Value: !Ref ImagesBucket
+  LambdaName:
+    Value: !Ref ImageResizerLambda
+  LambdaCodeBucketName:
+    Value: !Sub "lambdas-${AWS::AccountId}-${AWS::Region}"
