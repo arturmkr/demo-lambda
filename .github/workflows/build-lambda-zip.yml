@@ -2,11 +2,6 @@ name: build-lambda-zip
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "lambda/**"
-      - ".github/workflows/build-lambda-zip.yml"
 
 jobs:
   build:

@@ -1,0 +1,98 @@
+name: deploy-thumbnail-lambda
+
+on:
+  workflow_dispatch:
+
+env:
+  STACK_1: image-lambda-bucket
+  STACK_2: images-lambda
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build function.zip
+        working-directory: lambda
+        run: |
+          set -e
+          rm -rf build function.zip
+          mkdir build
+          cp index.py requirements.txt build/
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt -t build
+          cd build
+          zip -r ../function.zip .
+          cd ..
+          ls -lh function.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zip
+          path: lambda/function.zip
+  infra-bucket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy stack 1 (lambda bucket)
+        run: |
+          aws cloudformation deploy \
+            --stack-name "${STACK_1}" \
+            --template-file cloudformation/01-lambda-bucket.yaml \
+            --capabilities CAPABILITY_NAMED_IAM
+  upload-lambda:
+    runs-on: ubuntu-latest
+    needs: [build, infra-bucket]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download lambda artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-zip
+          path: .
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload zip to S3
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGION=${{ secrets.AWS_REGION }}
+          CODE_BUCKET="lambdas-${ACCOUNT_ID}-${REGION}"
+          aws s3 cp function.zip s3://${CODE_BUCKET}/function.zip
+  deploy-lambda:
+    runs-on: ubuntu-latest
+    needs: upload-lambda
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy stack 2 (images + lambda)
+        run: |
+          aws cloudformation deploy \
+            --stack-name "${STACK_2}" \
+            --template-file cloudformation/02-images-and-lambda.yaml \
+            --capabilities CAPABILITY_NAMED_IAM
