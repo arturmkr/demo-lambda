@@ -49,7 +49,7 @@ jobs:
         run: |
           aws cloudformation deploy \
             --stack-name "${STACK_1}" \
-            --template-file cloudformation/01-lambda-bucket.yaml \
+            --template-file infra/01-lambda-bucket.yaml \
             --capabilities CAPABILITY_NAMED_IAM
   upload-lambda:
     runs-on: ubuntu-latest
@@ -97,5 +97,5 @@ jobs:
         run: |
           aws cloudformation deploy \
             --stack-name "${STACK_2}" \
-            --template-file cloudformation/02-images-and-lambda.yaml \
+            --template-file infra/02-images-and-lambda.yaml \
             --capabilities CAPABILITY_NAMED_IAM
