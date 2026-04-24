@@ -3,7 +3,7 @@
 Set the API URL once:
 
 ```bash
-export API_URL="https://b3jrq7btbb.execute-api.us-east-1.amazonaws.com"
+export API_URL="https://st5g456w98.execute-api.us-east-1.amazonaws.com"
 ```
 
 ## 1. Upload One Image
