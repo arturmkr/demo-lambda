@@ -3,7 +3,7 @@
 Set the API URL once:
 
 ```bash
-export API_URL="https://fzrlzr2zrg.execute-api.us-east-1.amazonaws.com"
+export API_URL="https://7gtn9ucur8.execute-api.us-east-1.amazonaws.com"
 ```
 
 ## 0. Run Local Tests First

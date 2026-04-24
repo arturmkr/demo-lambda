@@ -5,6 +5,8 @@ plugins {
     id 'com.gradleup.shadow' version '9.2.0'
 }
 
+import com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer
+
 group = 'com.demo.catalog'
 version = '0.0.1-SNAPSHOT'
 
@@ -54,4 +56,15 @@ tasks.named('jar') {
 
 tasks.named('shadowJar') {
     archiveFileName = 'app.jar'
+    mergeServiceFiles()
+    append 'META-INF/spring.handlers'
+    append 'META-INF/spring.schemas'
+    append 'META-INF/spring.tooling'
+    append 'META-INF/spring.components'
+    append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
+    append 'META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports'
+    transform(PropertiesFileTransformer) {
+        paths = ['META-INF/spring.factories']
+        mergeStrategy = "append"
+    }
 }
