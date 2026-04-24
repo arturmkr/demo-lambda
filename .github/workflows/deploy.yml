@@ -32,7 +32,9 @@ jobs:
           gradle-version: 9.1.0
 
       - name: Build application
-        run: gradle clean test shadowJar
+        run: |
+          chmod +x scripts/test-local.sh
+          ./scripts/test-local.sh
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
