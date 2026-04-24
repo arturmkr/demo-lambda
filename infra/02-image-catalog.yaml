@@ -1,0 +1,273 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Serverless Spring AI Image Catalog
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: image-catalog
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket containing the packaged Lambda jar
+  ArtifactKey:
+    Type: String
+    Default: app.jar
+    Description: S3 object key for the packaged Lambda jar
+
+Resources:
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - ProcessImageInvokePermission
+    Properties:
+      BucketName: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt ProcessImageFunction.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: original/
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ImagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-images"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: imageId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: imageId
+          KeyType: HASH
+
+  CatalogLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role-${AWS::Region}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-catalog-policy"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub "${ImagesBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ImagesBucket.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt ImagesTable.Arn
+              - Effect: Allow
+                Action:
+                  - rekognition:DetectLabels
+                  - rekognition:DetectModerationLabels
+                Resource: '*'
+
+  UploadImageFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-upload"
+      Runtime: java25
+      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
+      MemorySize: 1024
+      Timeout: 30
+      Role: !GetAtt CatalogLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          SPRING_CLOUD_FUNCTION_DEFINITION: uploadImage
+          MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
+          APP_IMAGES_BUCKET: !Ref ImagesBucket
+          APP_IMAGES_TABLE: !Ref ImagesTable
+
+  SearchImagesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-search"
+      Runtime: java25
+      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
+      MemorySize: 1024
+      Timeout: 30
+      Role: !GetAtt CatalogLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          SPRING_CLOUD_FUNCTION_DEFINITION: searchImages
+          MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
+          APP_IMAGES_BUCKET: !Ref ImagesBucket
+          APP_IMAGES_TABLE: !Ref ImagesTable
+
+  GetImageFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-get"
+      Runtime: java25
+      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
+      MemorySize: 1024
+      Timeout: 30
+      Role: !GetAtt CatalogLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          SPRING_CLOUD_FUNCTION_DEFINITION: getImage
+          MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
+          APP_IMAGES_BUCKET: !Ref ImagesBucket
+          APP_IMAGES_TABLE: !Ref ImagesTable
+
+  ProcessImageFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-process"
+      Runtime: java25
+      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
+      MemorySize: 1536
+      Timeout: 60
+      Role: !GetAtt CatalogLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          SPRING_CLOUD_FUNCTION_DEFINITION: processImage
+          MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
+          APP_IMAGES_BUCKET: !Ref ImagesBucket
+          APP_IMAGES_TABLE: !Ref ImagesTable
+
+  ProcessImageInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProcessImageFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt ImagesBucket.Arn
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-http-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - '*'
+
+  UploadIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt UploadImageFunction.Arn
+      PayloadFormatVersion: '1.0'
+
+  SearchIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt SearchImagesFunction.Arn
+      PayloadFormatVersion: '1.0'
+
+  GetIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt GetImageFunction.Arn
+      PayloadFormatVersion: '1.0'
+
+  UploadRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /images
+      Target: !Sub "integrations/${UploadIntegration}"
+
+  SearchRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /images
+      Target: !Sub "integrations/${SearchIntegration}"
+
+  GetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /images/{imageId}
+      Target: !Sub "integrations/${GetIntegration}"
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  UploadApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UploadImageFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+  SearchApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SearchImagesFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+  GetApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetImageFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+Outputs:
+  ApiBaseUrl:
+    Description: API Gateway base URL
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  ImagesBucketName:
+    Value: !Ref ImagesBucket
+  ImagesTableName:
+    Value: !Ref ImagesTable

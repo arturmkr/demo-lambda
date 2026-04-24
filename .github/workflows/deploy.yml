@@ -1,43 +1,40 @@
-name: deploy-thumbnail-lambda
+name: Build and Deploy
 
 on:
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
-  STACK_1: image-lambda-bucket
-  STACK_2: images-lambda
+  BOOTSTRAP_STACK_NAME: image-catalog-bootstrap
+  STACK_NAME: image-catalog
+  ARTIFACT_KEY: artifacts/app.jar
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Build function.zip
-        working-directory: lambda
-        run: |
-          set -e
-          rm -rf build function.zip
-          mkdir build
-          cp index.py requirements.txt build/
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements.txt -t build
-          cd build
-          zip -r ../function.zip .
-          cd ..
-          ls -lh function.zip
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          name: lambda-zip
-          path: lambda/function.zip
-  infra-bucket:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          distribution: temurin
+          java-version: '25'
 
-      - name: Configure AWS
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.1.0
+
+      - name: Build application
+        run: gradle clean test bootJar
+
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -45,57 +42,35 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Deploy stack 1 (lambda bucket)
+      - name: Deploy bootstrap stack
         run: |
           aws cloudformation deploy \
-            --stack-name "${STACK_1}" \
-            --template-file infra/01-lambda-bucket.yaml \
-            --capabilities CAPABILITY_NAMED_IAM
-  upload-lambda:
-    runs-on: ubuntu-latest
-    needs: [build, infra-bucket]
+            --stack-name "$BOOTSTRAP_STACK_NAME" \
+            --template-file infra/01-artifact-bucket.yaml \
+            --parameter-overrides ProjectName="$STACK_NAME"
+          ARTIFACT_BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name "$BOOTSTRAP_STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='ArtifactBucketName'].OutputValue" \
+            --output text)
+          echo "ARTIFACT_BUCKET=$ARTIFACT_BUCKET" >> "$GITHUB_ENV"
 
-    steps:
-      - uses: actions/checkout@v4
+      - name: Upload Lambda artifact
+        run: aws s3 cp build/libs/app.jar "s3://${ARTIFACT_BUCKET}/${ARTIFACT_KEY}"
 
-      - name: Download lambda artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: lambda-zip
-          path: .
-
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Upload zip to S3
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          REGION=${{ secrets.AWS_REGION }}
-          CODE_BUCKET="lambdas-${ACCOUNT_ID}-${REGION}"
-          aws s3 cp function.zip s3://${CODE_BUCKET}/function.zip
-  deploy-lambda:
-    runs-on: ubuntu-latest
-    needs: upload-lambda
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Deploy stack 2 (images + lambda)
+      - name: Deploy CloudFormation
         run: |
           aws cloudformation deploy \
-            --stack-name "${STACK_2}" \
-            --template-file infra/02-images-and-lambda.yaml \
-            --capabilities CAPABILITY_NAMED_IAM
+            --stack-name "$STACK_NAME" \
+            --template-file infra/02-image-catalog.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              ProjectName="$STACK_NAME" \
+              ArtifactBucket="$ARTIFACT_BUCKET" \
+              ArtifactKey="$ARTIFACT_KEY"
+
+      - name: Output API URL
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiBaseUrl'].OutputValue" \
+            --output text
