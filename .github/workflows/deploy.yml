@@ -32,7 +32,7 @@ jobs:
           gradle-version: 9.1.0
 
       - name: Build application
-        run: gradle clean test bootJar
+        run: gradle clean test shadowJar
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
