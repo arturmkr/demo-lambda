@@ -33,9 +33,29 @@ public class ApiHandlers {
     public Function<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> uploadImage() {
         return request -> {
             try {
-                byte[] imageBytes = resolveUploadBody(request);
-                String contentType = resolveContentType(request);
-                return ok(imageCatalogService.upload(imageBytes, contentType));
+                String reqContentType = resolveContentType(request);
+                byte[] imageBytes;
+                String imageContentType;
+
+                if (reqContentType.contains("application/json")) {
+                    UploadImageRequest payload = objectMapper.readValue(request.getBody(), UploadImageRequest.class);
+                    if (payload.base64Data() == null) {
+                        throw new IllegalArgumentException("JSON body must include base64Data");
+                    }
+                    imageBytes = Base64.getDecoder().decode(payload.base64Data());
+                    imageContentType = StringUtils.isBlank(payload.contentType()) ? "image/jpeg" : payload.contentType();
+                } else {
+                    String body = request.getBody();
+                    boolean isBase64 = Boolean.TRUE.equals(request.getIsBase64Encoded());
+                    if (!isBase64 && body != null && reqContentType.startsWith("image/")) {
+                        imageBytes = body.getBytes(StandardCharsets.ISO_8859_1);
+                    } else {
+                        imageBytes = imageCatalogService.decodeImageBody(body, isBase64);
+                    }
+                    imageContentType = reqContentType;
+                }
+
+                return ok(imageCatalogService.upload(imageBytes, imageContentType));
             } catch (Exception exception) {
                 return error(400, exception.getMessage());
             }
@@ -81,23 +101,6 @@ public class ApiHandlers {
                 return error(500, exception.getMessage());
             }
         };
-    }
-
-    private byte[] resolveUploadBody(APIGatewayProxyRequestEvent request) throws JsonProcessingException {
-        String contentType = resolveContentType(request);
-        if (contentType.contains("application/json")) {
-            UploadImageRequest payload = objectMapper.readValue(request.getBody(), UploadImageRequest.class);
-            if (payload.base64Data() == null) {
-                throw new IllegalArgumentException("JSON body must include base64Data");
-            }
-            return Base64.getDecoder().decode(payload.base64Data());
-        }
-
-        String body = request.getBody();
-        if (!Boolean.TRUE.equals(request.getIsBase64Encoded()) && body != null && contentType.startsWith("image/")) {
-            return body.getBytes(StandardCharsets.ISO_8859_1);
-        }
-        return imageCatalogService.decodeImageBody(body, Boolean.TRUE.equals(request.getIsBase64Encoded()));
     }
 
     private String resolveContentType(APIGatewayProxyRequestEvent request) {
