@@ -12,6 +12,13 @@ Parameters:
     Type: String
     Default: app.jar
     Description: S3 object key for the packaged Lambda jar
+  LambdaExecutionRoleArn:
+    Type: String
+    Default: ""
+    Description: Existing IAM role ARN for Lambda execution
+
+Conditions:
+  CreateCatalogLambdaRole: !Equals [!Ref LambdaExecutionRoleArn, ""]
 
 Resources:
   ImagesBucket:
@@ -49,6 +56,7 @@ Resources:
 
   CatalogLambdaRole:
     Type: AWS::IAM::Role
+    Condition: CreateCatalogLambdaRole
     Properties:
       RoleName: !Sub "${ProjectName}-lambda-role-${AWS::Region}"
       AssumeRolePolicyDocument:
@@ -97,7 +105,7 @@ Resources:
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       MemorySize: 1024
       Timeout: 30
-      Role: !GetAtt CatalogLambdaRole.Arn
+      Role: !If [CreateCatalogLambdaRole, !GetAtt CatalogLambdaRole.Arn, !Ref LambdaExecutionRoleArn]
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey
@@ -116,7 +124,7 @@ Resources:
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       MemorySize: 1024
       Timeout: 30
-      Role: !GetAtt CatalogLambdaRole.Arn
+      Role: !If [CreateCatalogLambdaRole, !GetAtt CatalogLambdaRole.Arn, !Ref LambdaExecutionRoleArn]
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey
@@ -135,7 +143,7 @@ Resources:
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       MemorySize: 1024
       Timeout: 30
-      Role: !GetAtt CatalogLambdaRole.Arn
+      Role: !If [CreateCatalogLambdaRole, !GetAtt CatalogLambdaRole.Arn, !Ref LambdaExecutionRoleArn]
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey
@@ -154,7 +162,7 @@ Resources:
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       MemorySize: 1536
       Timeout: 60
-      Role: !GetAtt CatalogLambdaRole.Arn
+      Role: !If [CreateCatalogLambdaRole, !GetAtt CatalogLambdaRole.Arn, !Ref LambdaExecutionRoleArn]
       Code:
         S3Bucket: !Ref ArtifactBucket
         S3Key: !Ref ArtifactKey
