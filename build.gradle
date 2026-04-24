@@ -2,11 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.6'
     id 'io.spring.dependency-management' version '1.1.6'
-    id 'com.gradleup.shadow' version '9.2.0'
 }
-
-import com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer
-import com.github.jengelman.gradle.plugins.shadow.transformers.ServiceFileTransformer
 
 group = 'com.demo.catalog'
 version = '0.0.1-SNAPSHOT'
@@ -55,19 +51,11 @@ tasks.named('jar') {
     enabled = false
 }
 
-tasks.named('shadowJar') {
+tasks.register('shadowJar', Zip) {
     archiveFileName = 'app.jar'
-    mergeServiceFiles()
-    append 'META-INF/spring.handlers'
-    append 'META-INF/spring.schemas'
-    append 'META-INF/spring.tooling'
-    
-    transform(PropertiesFileTransformer) {
-        paths = ['META-INF/spring.factories', 'META-INF/spring.components']
-        mergeStrategy = "append"
-    }
-
-    transform(ServiceFileTransformer) {
-        path = 'META-INF/spring'
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    from sourceSets.main.output
+    into('lib') {
+        from configurations.runtimeClasspath
     }
 }

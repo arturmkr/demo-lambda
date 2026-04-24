@@ -2,4 +2,6 @@ FROM public.ecr.aws/lambda/java:25
 
 COPY build/libs/app.jar ${LAMBDA_TASK_ROOT}/app.jar
 
+RUN cd ${LAMBDA_TASK_ROOT}/ && jar xf app.jar && rm app.jar
+
 CMD ["org.springframework.cloud.function.adapter.aws.FunctionInvoker"]
