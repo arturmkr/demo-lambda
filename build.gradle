@@ -68,9 +68,6 @@ tasks.named('shadowJar') {
     }
 
     transform(ServiceFileTransformer) {
-        path = 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
-    }
-    transform(ServiceFileTransformer) {
-        path = 'META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports'
+        path = 'META-INF/spring'
     }
 }
