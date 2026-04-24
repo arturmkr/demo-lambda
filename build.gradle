@@ -6,6 +6,7 @@ plugins {
 }
 
 import com.github.jengelman.gradle.plugins.shadow.transformers.PropertiesFileTransformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.ServiceFileTransformer
 
 group = 'com.demo.catalog'
 version = '0.0.1-SNAPSHOT'
@@ -60,11 +61,16 @@ tasks.named('shadowJar') {
     append 'META-INF/spring.handlers'
     append 'META-INF/spring.schemas'
     append 'META-INF/spring.tooling'
-    append 'META-INF/spring.components'
-    append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
-    append 'META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports'
+    
     transform(PropertiesFileTransformer) {
-        paths = ['META-INF/spring.factories']
+        paths = ['META-INF/spring.factories', 'META-INF/spring.components']
         mergeStrategy = "append"
+    }
+
+    transform(ServiceFileTransformer) {
+        path = 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
+    }
+    transform(ServiceFileTransformer) {
+        path = 'META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports'
     }
 }
