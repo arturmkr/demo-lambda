@@ -125,12 +125,14 @@ public class ApiHandlers {
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(statusCode)
                     .withHeaders(Map.of("Content-Type", "application/json"))
-                    .withBody(objectMapper.writeValueAsString(body));
+                    .withBody(objectMapper.writeValueAsString(body))
+                    .withIsBase64Encoded(false);
         } catch (JsonProcessingException exception) {
             return new APIGatewayProxyResponseEvent()
                     .withStatusCode(500)
                     .withHeaders(Map.of("Content-Type", "application/json"))
-                    .withBody("{\"error\":\"Failed to serialize response\"}");
+                    .withBody("{\"error\":\"Failed to serialize response\"}")
+                    .withIsBase64Encoded(false);
         }
     }
 }
