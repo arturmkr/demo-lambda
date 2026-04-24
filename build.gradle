@@ -29,6 +29,7 @@ dependencies {
     implementation "org.springframework.cloud:spring-cloud-function-adapter-aws:${springCloudFunctionVersion}"
     implementation 'com.amazonaws:aws-lambda-java-events:3.11.5'
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation "software.amazon.awssdk:auth:${awsSdkVersion}"
     implementation "software.amazon.awssdk:s3:${awsSdkVersion}"
     implementation "software.amazon.awssdk:dynamodb:${awsSdkVersion}"
     implementation "software.amazon.awssdk:rekognition:${awsSdkVersion}"
@@ -36,6 +37,7 @@ dependencies {
     implementation 'org.apache.commons:commons-lang3:3.17.0'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation "org.mockito:mockito-junit-jupiter:5.15.2"
 }
 
 tasks.named('test') {

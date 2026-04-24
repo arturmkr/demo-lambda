@@ -1,0 +1,14 @@
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,dynamodb
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: 0
+    healthcheck:
+      test: ["CMD", "bash", "-c", "awslocal s3 ls >/dev/null 2>&1 && awslocal dynamodb list-tables >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

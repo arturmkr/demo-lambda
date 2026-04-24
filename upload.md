@@ -3,8 +3,18 @@
 Set the API URL once:
 
 ```bash
-export API_URL="https://st5g456w98.execute-api.us-east-1.amazonaws.com"
+export API_URL="https://fzrlzr2zrg.execute-api.us-east-1.amazonaws.com"
 ```
+
+## 0. Run Local Tests First
+
+Run the Docker Compose LocalStack test flow from the project root:
+
+```bash
+./scripts/test-local.sh
+```
+
+This starts LocalStack, runs the Spring tests, and shuts everything down.
 
 ## 1. Upload One Image
 
