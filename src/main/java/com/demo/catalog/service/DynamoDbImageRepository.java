@@ -43,6 +43,7 @@ public class DynamoDbImageRepository {
         Map<String, AttributeValue> item = dynamoDbClient.getItem(GetItemRequest.builder()
                 .tableName(appProperties.getImagesTable())
                 .key(key)
+                .consistentRead(true)
                 .build()).item();
 
         if (item == null || item.isEmpty()) {
