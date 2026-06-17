@@ -93,42 +93,6 @@ Resources:
       Value: !Ref ThumbnailImagesPrefix
       Description: Thumbnail image object prefix for the image catalog Lambda functions
 
-  UploadImageLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-upload"
-      RetentionInDays: 30
-
-  MyImagesLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-my-images"
-      RetentionInDays: 30
-
-  AllImagesLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-all-images"
-      RetentionInDays: 30
-
-  ApproveImageLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-approve"
-      RetentionInDays: 30
-
-  RejectImageLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-reject"
-      RetentionInDays: 30
-
-  ProcessImageLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-process"
-      RetentionInDays: 30
-
   ImagesBucket:
     Type: AWS::S3::Bucket
     DependsOn:
@@ -197,6 +161,10 @@ Resources:
                 Action:
                   - rekognition:DetectLabels
                   - rekognition:DetectModerationLabels
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
                 Resource: '*'
               - Effect: Allow
                 Action:
