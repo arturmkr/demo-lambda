@@ -7,12 +7,14 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.time.Duration;
+import java.util.Map;
 
 @Service
 public class S3StorageService {
@@ -28,12 +30,25 @@ public class S3StorageService {
     }
 
     public void upload(String key, byte[] content, String contentType) {
+        upload(key, content, contentType, Map.of());
+    }
+
+    public void upload(String key, byte[] content, String contentType, Map<String, String> metadata) {
         s3Client.putObject(PutObjectRequest.builder()
                         .bucket(appProperties.getImageBucket())
                         .key(key)
                         .contentType(contentType)
+                        .metadata(metadata)
                         .build(),
                 RequestBody.fromBytes(content));
+    }
+
+    public Map<String, String> metadata(String key) {
+        return s3Client.headObject(HeadObjectRequest.builder()
+                        .bucket(appProperties.getImageBucket())
+                        .key(key)
+                        .build())
+                .metadata();
     }
 
     public byte[] download(String key) {

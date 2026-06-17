@@ -14,13 +14,17 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 public class ImageCatalogService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageCatalogService.class);
+    private static final String UPLOADED_BY_SUB_METADATA = "uploaded-by-sub";
+    private static final String UPLOADED_BY_EMAIL_METADATA = "uploaded-by-email";
 
     private final AppProperties appProperties;
     private final S3StorageService s3StorageService;
@@ -58,7 +62,7 @@ public class ImageCatalogService {
         metadata.setUploadedByEmail(uploadedByEmail);
         imageRepository.save(metadata);
 
-        s3StorageService.upload(originalKey, imageBytes, normalizedContentType);
+        s3StorageService.upload(originalKey, imageBytes, normalizedContentType, ownerMetadata(uploadedBySub, uploadedByEmail));
 
         LOGGER.info("Image upload event imageId={} uploadedBySub={} uploadedByEmail={} contentType={}",
                 imageId, uploadedBySub, uploadedByEmail, normalizedContentType);
@@ -72,8 +76,8 @@ public class ImageCatalogService {
         }
 
         String imageId = extractImageId(s3Key);
-        ImageMetadata metadata = imageRepository.findById(imageId)
-                .orElseGet(() -> fallbackMetadata(imageId, s3Key));
+        ImageMetadata metadata = findForProcessing(imageId)
+                .orElseGet(() -> fallbackMetadata(imageId, s3Key, s3StorageService.metadata(s3Key)));
 
         byte[] original = s3StorageService.download(s3Key);
         byte[] thumbnail = imageTransformService.createThumbnail(original);
@@ -171,6 +175,22 @@ public class ImageCatalogService {
                 .orElseThrow(() -> new NoSuchElementException("Image not found: " + imageId));
     }
 
+    private Optional<ImageMetadata> findForProcessing(String imageId) {
+        Optional<ImageMetadata> metadata = imageRepository.findById(imageId);
+        if (metadata.isPresent()) {
+            return metadata;
+        }
+
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return metadata;
+        }
+
+        return imageRepository.findById(imageId);
+    }
+
     private String extractImageId(String s3Key) {
         String fileName = s3Key.substring(appProperties.getOriginalPrefix().length());
         int dot = fileName.lastIndexOf('.');
@@ -178,11 +198,28 @@ public class ImageCatalogService {
     }
 
     private ImageMetadata fallbackMetadata(String imageId, String originalKey) {
+        return fallbackMetadata(imageId, originalKey, Map.of());
+    }
+
+    private ImageMetadata fallbackMetadata(String imageId, String originalKey, Map<String, String> ownerMetadata) {
         ImageMetadata metadata = new ImageMetadata();
         metadata.setImageId(imageId);
         metadata.setOriginalKey(originalKey);
         metadata.setStatus(ImageStatus.PROCESSING);
         metadata.setUploadedAt(Instant.now().toString());
+        metadata.setUploadedBySub(ownerMetadata.get(UPLOADED_BY_SUB_METADATA));
+        metadata.setUploadedByEmail(ownerMetadata.get(UPLOADED_BY_EMAIL_METADATA));
+        return metadata;
+    }
+
+    private Map<String, String> ownerMetadata(String uploadedBySub, String uploadedByEmail) {
+        java.util.HashMap<String, String> metadata = new java.util.HashMap<>();
+        if (StringUtils.isNotBlank(uploadedBySub)) {
+            metadata.put(UPLOADED_BY_SUB_METADATA, uploadedBySub);
+        }
+        if (StringUtils.isNotBlank(uploadedByEmail)) {
+            metadata.put(UPLOADED_BY_EMAIL_METADATA, uploadedByEmail);
+        }
         return metadata;
     }
 
