@@ -38,7 +38,7 @@ Role access:
 
 The CloudFormation stack creates the Cognito User Pool, User Pool Client, and `USER`/`ADMIN` groups. Demo users are intentionally not hardcoded in IaC; create them manually for exam/demo runs. Production users should be managed through a real onboarding, invitation, federation, or identity governance flow rather than committed CloudFormation users.
 
-Lambda execution permissions are scoped to the required S3 object prefixes, the image metadata DynamoDB table, Rekognition label/moderation APIs, and explicit CloudWatch log groups. SSM Parameter Store is used for environment-specific image prefix configuration, and secrets must not be hardcoded in source code or templates.
+Lambda execution permissions are scoped to the required S3 object prefixes, the image metadata DynamoDB table, Rekognition label/moderation APIs, and explicit CloudWatch log groups. Environment-specific image prefix configuration is captured as stack parameters and recorded in SSM Parameter Store; secrets must not be hardcoded in source code or templates.
 
 Amazon Rekognition moderation labels act as a content safety/security control during image processing. CloudWatch logs include authenticated user identity, Cognito groups, upload events, Rekognition results, approval/rejection decisions, and forbidden access attempts. Tokens and secrets are not logged.
 

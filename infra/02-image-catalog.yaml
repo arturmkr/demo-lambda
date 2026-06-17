@@ -231,8 +231,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
-          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
-          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+          APP_IMAGES_ORIGINAL_PREFIX: !Ref OriginalImagesPrefix
+          APP_IMAGES_THUMBNAIL_PREFIX: !Ref ThumbnailImagesPrefix
 
   MyImagesFunction:
     Type: AWS::Lambda::Function
@@ -255,8 +255,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
-          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
-          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+          APP_IMAGES_ORIGINAL_PREFIX: !Ref OriginalImagesPrefix
+          APP_IMAGES_THUMBNAIL_PREFIX: !Ref ThumbnailImagesPrefix
 
   AllImagesFunction:
     Type: AWS::Lambda::Function
@@ -279,8 +279,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
-          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
-          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+          APP_IMAGES_ORIGINAL_PREFIX: !Ref OriginalImagesPrefix
+          APP_IMAGES_THUMBNAIL_PREFIX: !Ref ThumbnailImagesPrefix
 
   ApproveImageFunction:
     Type: AWS::Lambda::Function
@@ -303,8 +303,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
-          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
-          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+          APP_IMAGES_ORIGINAL_PREFIX: !Ref OriginalImagesPrefix
+          APP_IMAGES_THUMBNAIL_PREFIX: !Ref ThumbnailImagesPrefix
 
   RejectImageFunction:
     Type: AWS::Lambda::Function
@@ -327,8 +327,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
-          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
-          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+          APP_IMAGES_ORIGINAL_PREFIX: !Ref OriginalImagesPrefix
+          APP_IMAGES_THUMBNAIL_PREFIX: !Ref ThumbnailImagesPrefix
 
   ProcessImageFunction:
     Type: AWS::Lambda::Function
@@ -351,8 +351,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
-          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
-          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+          APP_IMAGES_ORIGINAL_PREFIX: !Ref OriginalImagesPrefix
+          APP_IMAGES_THUMBNAIL_PREFIX: !Ref ThumbnailImagesPrefix
 
   ProcessImageInvokePermission:
     Type: AWS::Lambda::Permission
