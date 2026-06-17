@@ -16,11 +16,119 @@ Parameters:
     Type: String
     Default: ""
     Description: Existing IAM role ARN for Lambda execution
+  OriginalImagesPrefix:
+    Type: String
+    Default: original/
+    Description: S3 prefix used for original uploaded images
+  ThumbnailImagesPrefix:
+    Type: String
+    Default: thumbnail/
+    Description: S3 prefix used for generated thumbnails
 
 Conditions:
   CreateCatalogLambdaRole: !Equals [!Ref LambdaExecutionRoleArn, ""]
 
 Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectName}-users"
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${ProjectName}-api-client"
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+
+  CognitoUserGroupUser:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: USER
+      Description: Standard image catalog user
+      UserPoolId: !Ref CognitoUserPool
+      Precedence: 20
+
+  CognitoUserGroupAdmin:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: ADMIN
+      Description: Image catalog administrator
+      UserPoolId: !Ref CognitoUserPool
+      Precedence: 10
+
+  OriginalImagesPrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectName}/images/original-prefix"
+      Type: String
+      Value: !Ref OriginalImagesPrefix
+      Description: Original image object prefix for the image catalog Lambda functions
+
+  ThumbnailImagesPrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectName}/images/thumbnail-prefix"
+      Type: String
+      Value: !Ref ThumbnailImagesPrefix
+      Description: Thumbnail image object prefix for the image catalog Lambda functions
+
+  UploadImageLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-upload"
+      RetentionInDays: 30
+
+  MyImagesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-my-images"
+      RetentionInDays: 30
+
+  AllImagesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-all-images"
+      RetentionInDays: 30
+
+  ApproveImageLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-approve"
+      RetentionInDays: 30
+
+  RejectImageLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-reject"
+      RetentionInDays: 30
+
+  ProcessImageLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-process"
+      RetentionInDays: 30
+
   ImagesBucket:
     Type: AWS::S3::Bucket
     DependsOn:
@@ -35,7 +143,7 @@ Resources:
               S3Key:
                 Rules:
                   - Name: prefix
-                    Value: original/
+                    Value: !Ref OriginalImagesPrefix
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -66,8 +174,6 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
         - PolicyName: !Sub "${ProjectName}-catalog-policy"
           PolicyDocument:
@@ -78,12 +184,8 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                 Resource:
-                  - !Sub "arn:aws:s3:::${ProjectName}-images-${AWS::AccountId}-${AWS::Region}/*"
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource:
-                  - !Sub "arn:aws:s3:::${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::${ProjectName}-images-${AWS::AccountId}-${AWS::Region}/${OriginalImagesPrefix}*"
+                  - !Sub "arn:aws:s3:::${ProjectName}-images-${AWS::AccountId}-${AWS::Region}/${ThumbnailImagesPrefix}*"
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
@@ -96,9 +198,23 @@ Resources:
                   - rekognition:DetectLabels
                   - rekognition:DetectModerationLabels
                 Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-upload:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-my-images:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-all-images:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-approve:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-reject:*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ProjectName}-process:*"
 
   UploadImageFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - OriginalImagesPrefixParameter
+      - ThumbnailImagesPrefixParameter
     Properties:
       FunctionName: !Sub "${ProjectName}-upload"
       Runtime: java25
@@ -115,11 +231,16 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
+          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
+          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
 
-  SearchImagesFunction:
+  MyImagesFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - OriginalImagesPrefixParameter
+      - ThumbnailImagesPrefixParameter
     Properties:
-      FunctionName: !Sub "${ProjectName}-search"
+      FunctionName: !Sub "${ProjectName}-my-images"
       Runtime: java25
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       MemorySize: 1024
@@ -130,15 +251,20 @@ Resources:
         S3Key: !Ref ArtifactKey
       Environment:
         Variables:
-          SPRING_CLOUD_FUNCTION_DEFINITION: searchImages
+          SPRING_CLOUD_FUNCTION_DEFINITION: listMyImages
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
+          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
+          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
 
-  GetImageFunction:
+  AllImagesFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - OriginalImagesPrefixParameter
+      - ThumbnailImagesPrefixParameter
     Properties:
-      FunctionName: !Sub "${ProjectName}-get"
+      FunctionName: !Sub "${ProjectName}-all-images"
       Runtime: java25
       Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
       MemorySize: 1024
@@ -149,13 +275,66 @@ Resources:
         S3Key: !Ref ArtifactKey
       Environment:
         Variables:
-          SPRING_CLOUD_FUNCTION_DEFINITION: getImage
+          SPRING_CLOUD_FUNCTION_DEFINITION: listAllImages
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
+          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
+          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+
+  ApproveImageFunction:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - OriginalImagesPrefixParameter
+      - ThumbnailImagesPrefixParameter
+    Properties:
+      FunctionName: !Sub "${ProjectName}-approve"
+      Runtime: java25
+      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
+      MemorySize: 1024
+      Timeout: 30
+      Role: !If [CreateCatalogLambdaRole, !GetAtt CatalogLambdaRole.Arn, !Ref LambdaExecutionRoleArn]
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          SPRING_CLOUD_FUNCTION_DEFINITION: approveImage
+          MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
+          APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
+          APP_IMAGES_TABLE: !Ref ImagesTable
+          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
+          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
+
+  RejectImageFunction:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - OriginalImagesPrefixParameter
+      - ThumbnailImagesPrefixParameter
+    Properties:
+      FunctionName: !Sub "${ProjectName}-reject"
+      Runtime: java25
+      Handler: org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest
+      MemorySize: 1024
+      Timeout: 30
+      Role: !If [CreateCatalogLambdaRole, !GetAtt CatalogLambdaRole.Arn, !Ref LambdaExecutionRoleArn]
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          SPRING_CLOUD_FUNCTION_DEFINITION: rejectImage
+          MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
+          APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
+          APP_IMAGES_TABLE: !Ref ImagesTable
+          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
+          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
 
   ProcessImageFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - OriginalImagesPrefixParameter
+      - ThumbnailImagesPrefixParameter
     Properties:
       FunctionName: !Sub "${ProjectName}-process"
       Runtime: java25
@@ -172,6 +351,8 @@ Resources:
           MAIN_CLASS: com.demo.catalog.ImageCatalogApplication
           APP_IMAGES_BUCKET: !Sub "${ProjectName}-images-${AWS::AccountId}-${AWS::Region}"
           APP_IMAGES_TABLE: !Ref ImagesTable
+          APP_IMAGES_ORIGINAL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/original-prefix}}"
+          APP_IMAGES_THUMBNAIL_PREFIX: !Sub "{{resolve:ssm:/${ProjectName}/images/thumbnail-prefix}}"
 
   ProcessImageInvokePermission:
     Type: AWS::Lambda::Permission
@@ -195,6 +376,19 @@ Resources:
         AllowHeaders:
           - '*'
 
+  CognitoJwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource:
+        - '$request.header.Authorization'
+      Name: !Sub "${ProjectName}-cognito-authorizer"
+      JwtConfiguration:
+        Audience:
+          - !Ref CognitoUserPoolClient
+        Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"
+
   UploadIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
@@ -203,42 +397,82 @@ Resources:
       IntegrationUri: !GetAtt UploadImageFunction.Arn
       PayloadFormatVersion: '1.0'
 
-  SearchIntegration:
+  MyImagesIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref HttpApi
       IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt SearchImagesFunction.Arn
+      IntegrationUri: !GetAtt MyImagesFunction.Arn
       PayloadFormatVersion: '1.0'
 
-  GetIntegration:
+  AllImagesIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref HttpApi
       IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt GetImageFunction.Arn
+      IntegrationUri: !GetAtt AllImagesFunction.Arn
+      PayloadFormatVersion: '1.0'
+
+  ApproveImageIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApproveImageFunction.Arn
+      PayloadFormatVersion: '1.0'
+
+  RejectImageIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt RejectImageFunction.Arn
       PayloadFormatVersion: '1.0'
 
   UploadRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: POST /images
+      RouteKey: POST /images/upload
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoJwtAuthorizer
       Target: !Sub "integrations/${UploadIntegration}"
 
-  SearchRoute:
+  MyImagesRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET /images
-      Target: !Sub "integrations/${SearchIntegration}"
+      RouteKey: GET /images/my
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoJwtAuthorizer
+      Target: !Sub "integrations/${MyImagesIntegration}"
 
-  GetRoute:
+  AllImagesRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
-      RouteKey: GET /images/{imageId}
-      Target: !Sub "integrations/${GetIntegration}"
+      RouteKey: GET /images/all
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoJwtAuthorizer
+      Target: !Sub "integrations/${AllImagesIntegration}"
+
+  ApproveImageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /images/{id}/approve
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoJwtAuthorizer
+      Target: !Sub "integrations/${ApproveImageIntegration}"
+
+  RejectImageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /images/{id}/reject
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoJwtAuthorizer
+      Target: !Sub "integrations/${RejectImageIntegration}"
 
   ApiStage:
     Type: AWS::ApiGatewayV2::Stage
@@ -255,18 +489,34 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
 
-  SearchApiInvokePermission:
+  MyImagesApiInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref SearchImagesFunction
+      FunctionName: !Ref MyImagesFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
 
-  GetApiInvokePermission:
+  AllImagesApiInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref GetImageFunction
+      FunctionName: !Ref AllImagesFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+  ApproveImageApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApproveImageFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
+
+  RejectImageApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RejectImageFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*"
@@ -279,3 +529,9 @@ Outputs:
     Value: !Ref ImagesBucket
   ImagesTableName:
     Value: !Ref ImagesTable
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID for demo user administration and token requests
+    Value: !Ref CognitoUserPool
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID used by API clients
+    Value: !Ref CognitoUserPoolClient

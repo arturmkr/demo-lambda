@@ -76,6 +76,28 @@ public class DynamoDbImageRepository {
         return result;
     }
 
+    public List<ImageMetadata> findByUploaderSub(String uploadedBySub) {
+        ScanRequest request = ScanRequest.builder()
+                .tableName(appProperties.getImagesTable())
+                .filterExpression("uploadedBySub = :uploadedBySub")
+                .expressionAttributeValues(Map.of(
+                        ":uploadedBySub", AttributeValue.builder().s(uploadedBySub).build()
+                ))
+                .build();
+
+        List<ImageMetadata> result = new ArrayList<>();
+        dynamoDbClient.scanPaginator(request).items().forEach(item -> result.add(fromItem(item)));
+        return result;
+    }
+
+    public List<ImageMetadata> findAll() {
+        List<ImageMetadata> result = new ArrayList<>();
+        dynamoDbClient.scanPaginator(ScanRequest.builder()
+                .tableName(appProperties.getImagesTable())
+                .build()).items().forEach(item -> result.add(fromItem(item)));
+        return result;
+    }
+
     private Map<String, AttributeValue> toItem(ImageMetadata imageMetadata) {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("imageId", AttributeValue.builder().s(imageMetadata.getImageId()).build());
@@ -86,6 +108,8 @@ public class DynamoDbImageRepository {
         item.put("rejectionReason", AttributeValue.builder().s(nullSafe(imageMetadata.getRejectionReason())).build());
         item.put("uploadedAt", AttributeValue.builder().s(nullSafe(imageMetadata.getUploadedAt())).build());
         item.put("processedAt", AttributeValue.builder().s(nullSafe(imageMetadata.getProcessedAt())).build());
+        item.put("uploadedBySub", AttributeValue.builder().s(nullSafe(imageMetadata.getUploadedBySub())).build());
+        item.put("uploadedByEmail", AttributeValue.builder().s(nullSafe(imageMetadata.getUploadedByEmail())).build());
 
         List<AttributeValue> tagValues = imageMetadata.getTags() == null
                 ? List.of()
@@ -106,6 +130,8 @@ public class DynamoDbImageRepository {
         metadata.setRejectionReason(readString(item, "rejectionReason"));
         metadata.setUploadedAt(readString(item, "uploadedAt"));
         metadata.setProcessedAt(readString(item, "processedAt"));
+        metadata.setUploadedBySub(readString(item, "uploadedBySub"));
+        metadata.setUploadedByEmail(readString(item, "uploadedByEmail"));
 
         List<String> tags = Optional.ofNullable(item.get("tags"))
                 .map(AttributeValue::l)

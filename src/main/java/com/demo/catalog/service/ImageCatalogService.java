@@ -6,6 +6,8 @@ import com.demo.catalog.model.ImageResponse;
 import com.demo.catalog.model.ImageStatus;
 import com.demo.catalog.model.UploadImageResponse;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -17,6 +19,8 @@ import java.util.UUID;
 
 @Service
 public class ImageCatalogService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ImageCatalogService.class);
 
     private final AppProperties appProperties;
     private final S3StorageService s3StorageService;
@@ -37,6 +41,10 @@ public class ImageCatalogService {
     }
 
     public UploadImageResponse upload(byte[] imageBytes, String contentType) {
+        return upload(imageBytes, contentType, null, null);
+    }
+
+    public UploadImageResponse upload(byte[] imageBytes, String contentType, String uploadedBySub, String uploadedByEmail) {
         String imageId = "img-" + UUID.randomUUID().toString().substring(0, 8);
         String normalizedContentType = defaultContentType(contentType);
         String originalKey = appProperties.getOriginalPrefix() + imageId + extensionFor(normalizedContentType);
@@ -48,7 +56,12 @@ public class ImageCatalogService {
         metadata.setStatus(ImageStatus.PROCESSING);
         metadata.setOriginalKey(originalKey);
         metadata.setUploadedAt(Instant.now().toString());
+        metadata.setUploadedBySub(uploadedBySub);
+        metadata.setUploadedByEmail(uploadedByEmail);
         imageRepository.save(metadata);
+
+        LOGGER.info("Image upload event imageId={} uploadedBySub={} uploadedByEmail={} contentType={}",
+                imageId, uploadedBySub, uploadedByEmail, normalizedContentType);
 
         return new UploadImageResponse(imageId, ImageStatus.PROCESSING.name());
     }
@@ -69,6 +82,8 @@ public class ImageCatalogService {
 
         List<String> tags = rekognitionService.detectLabels(s3Key);
         List<String> moderationLabels = rekognitionService.detectModerationLabels(s3Key);
+
+        LOGGER.info("Rekognition result imageId={} labels={} moderationLabels={}", imageId, tags, moderationLabels);
 
         metadata.setThumbnailKey(thumbnailKey);
         metadata.setTags(tags);
@@ -96,10 +111,44 @@ public class ImageCatalogService {
                 .toList();
     }
 
+    public List<ImageResponse> listByUploaderSub(String uploadedBySub) {
+        return imageRepository.findByUploaderSub(uploadedBySub)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    public List<ImageResponse> listAll() {
+        return imageRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     public ImageResponse getById(String imageId) {
         return imageRepository.findById(imageId)
                 .map(this::toResponse)
                 .orElseThrow(() -> new NoSuchElementException("Image not found: " + imageId));
+    }
+
+    public ImageResponse approve(String imageId, String decidedBySub, String decidedByEmail) {
+        ImageMetadata metadata = findMetadata(imageId);
+        metadata.setStatus(ImageStatus.APPROVED);
+        metadata.setRejectionReason("");
+        imageRepository.save(metadata);
+        LOGGER.info("Approval decision imageId={} decision=APPROVED decidedBySub={} decidedByEmail={}",
+                imageId, decidedBySub, decidedByEmail);
+        return toResponse(metadata);
+    }
+
+    public ImageResponse reject(String imageId, String decidedBySub, String decidedByEmail) {
+        ImageMetadata metadata = findMetadata(imageId);
+        metadata.setStatus(ImageStatus.REJECTED);
+        metadata.setRejectionReason("Rejected by admin");
+        imageRepository.save(metadata);
+        LOGGER.info("Approval decision imageId={} decision=REJECTED decidedBySub={} decidedByEmail={}",
+                imageId, decidedBySub, decidedByEmail);
+        return toResponse(metadata);
     }
 
     public byte[] decodeImageBody(String body, boolean base64Encoded) {
@@ -115,6 +164,11 @@ public class ImageCatalogService {
                 .filter(StringUtils::isNotBlank)
                 .map(tag -> tag.trim().toLowerCase(Locale.ROOT))
                 .toList();
+    }
+
+    private ImageMetadata findMetadata(String imageId) {
+        return imageRepository.findById(imageId)
+                .orElseThrow(() -> new NoSuchElementException("Image not found: " + imageId));
     }
 
     private String extractImageId(String s3Key) {

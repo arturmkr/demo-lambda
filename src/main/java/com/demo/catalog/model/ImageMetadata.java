@@ -14,6 +14,8 @@ public class ImageMetadata {
     private String rejectionReason;
     private String uploadedAt;
     private String processedAt;
+    private String uploadedBySub;
+    private String uploadedByEmail;
 
     public String getImageId() {
         return imageId;
@@ -85,5 +87,21 @@ public class ImageMetadata {
 
     public void setProcessedAt(String processedAt) {
         this.processedAt = processedAt;
+    }
+
+    public String getUploadedBySub() {
+        return uploadedBySub;
+    }
+
+    public void setUploadedBySub(String uploadedBySub) {
+        this.uploadedBySub = uploadedBySub;
+    }
+
+    public String getUploadedByEmail() {
+        return uploadedByEmail;
+    }
+
+    public void setUploadedByEmail(String uploadedByEmail) {
+        this.uploadedByEmail = uploadedByEmail;
     }
 }

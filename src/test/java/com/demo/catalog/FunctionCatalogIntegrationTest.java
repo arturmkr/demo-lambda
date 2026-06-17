@@ -21,6 +21,10 @@ class FunctionCatalogIntegrationTest {
     @Test
     void shouldRegisterLambdaFunctions() {
         assertThat((Object) functionCatalog.lookup("uploadImage")).isNotNull();
+        assertThat((Object) functionCatalog.lookup("listMyImages")).isNotNull();
+        assertThat((Object) functionCatalog.lookup("listAllImages")).isNotNull();
+        assertThat((Object) functionCatalog.lookup("approveImage")).isNotNull();
+        assertThat((Object) functionCatalog.lookup("rejectImage")).isNotNull();
         assertThat((Object) functionCatalog.lookup("searchImages")).isNotNull();
         assertThat((Object) functionCatalog.lookup("getImage")).isNotNull();
         assertThat((Object) functionCatalog.lookup("processImage")).isNotNull();
