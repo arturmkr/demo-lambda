@@ -49,8 +49,6 @@ public class ImageCatalogService {
         String normalizedContentType = defaultContentType(contentType);
         String originalKey = appProperties.getOriginalPrefix() + imageId + extensionFor(normalizedContentType);
 
-        s3StorageService.upload(originalKey, imageBytes, normalizedContentType);
-
         ImageMetadata metadata = new ImageMetadata();
         metadata.setImageId(imageId);
         metadata.setStatus(ImageStatus.PROCESSING);
@@ -59,6 +57,8 @@ public class ImageCatalogService {
         metadata.setUploadedBySub(uploadedBySub);
         metadata.setUploadedByEmail(uploadedByEmail);
         imageRepository.save(metadata);
+
+        s3StorageService.upload(originalKey, imageBytes, normalizedContentType);
 
         LOGGER.info("Image upload event imageId={} uploadedBySub={} uploadedByEmail={} contentType={}",
                 imageId, uploadedBySub, uploadedByEmail, normalizedContentType);
