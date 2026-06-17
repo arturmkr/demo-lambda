@@ -10,7 +10,7 @@ permissions:
 env:
   BOOTSTRAP_STACK_NAME: image-catalog-bootstrap
   STACK_NAME: image-catalog
-  ARTIFACT_KEY: artifacts/app.jar
+  ARTIFACT_KEY: artifacts/app-${{ github.sha }}.jar
 
 jobs:
   deploy:

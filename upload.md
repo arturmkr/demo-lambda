@@ -123,7 +123,7 @@ Use the helper script from the project root.
 Tea image:
 
 ```bash
-ID_TOKEN="$USER_ID_TOKEN" IMAGE_PATH="images/tea1.jpg" bash scripts/upload-image.sh
+ID_TOKEN="$USER_ID_TOKEN" IMAGE_PATH="images/tv.jpg" bash scripts/upload-image.sh
 ```
 
 Coffee image:
